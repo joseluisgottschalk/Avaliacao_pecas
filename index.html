@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Venda mensal por linha — peças e valor</title>
+<style>
+:root{
+  --bg:#f6f7f9; --surface:#ffffff; --ink:#1b1f24; --ink2:#4a5360; --muted:#7a8494;
+  --line:#e3e6eb; --accent:#2a78d6; --accent-soft:#e8eefc; --sub:#f1f3f6; --bad:#b23a3a;
+  --heat:#2a78d6; --bar:#2a78d6; --bar-hi:#184f95;
+}
+@media (prefers-color-scheme: dark){
+  :root{--bg:#121417;--surface:#1b1e23;--ink:#e9ecf1;--ink2:#b5bcc7;--muted:#8a93a1;--line:#2c3139;
+  --accent:#3987e5;--accent-soft:#232c44;--sub:#22262c;--bad:#ff8a8a;--heat:#3987e5;--bar:#3987e5;--bar-hi:#86b6ef;}
+}
+*{box-sizing:border-box}
+body{margin:0;font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{padding:18px 24px 6px;display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;justify-content:space-between}
+h1{font-size:20px;margin:0;font-weight:650}
+h2{font-size:15px;margin:0;font-weight:650}
+.meta{color:var(--muted);font-size:12px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:end;padding:8px 24px 12px}
+.bar label{display:flex;flex-direction:column;font-size:11px;color:var(--muted);gap:3px;text-transform:uppercase;letter-spacing:.03em}
+select,input,button{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 9px}
+button{cursor:pointer}
+button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:6px 10px}
+.seg button.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.status{padding:0 24px 8px;color:var(--ink2);font-size:13px}
+.err{color:var(--bad)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;padding:0 24px 14px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.tile .k{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em}
+.tile .v{font-size:20px;font-weight:650;margin-top:4px;font-variant-numeric:tabular-nums}
+.tile .s{font-size:12px;color:var(--ink2);margin-top:2px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;margin:0 24px 16px}
+.card-h{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between;padding:12px 14px 4px}
+.card-h .sub{color:var(--muted);font-size:12px}
+.chart{padding:0 14px;position:relative}
+.chart svg{display:block;width:100%;height:170px}
+.chart .axis{fill:var(--muted);font-size:10px}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .b{fill:var(--bar)}
+.chart .hit:hover + .b,.chart .b.hov{fill:var(--bar-hi)}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--surface);font-size:12px;padding:6px 8px;border-radius:6px;white-space:nowrap;transform:translate(-50%,-110%);display:none;z-index:5;font-variant-numeric:tabular-nums}
+.tablebox{overflow:auto;max-height:560px;border-top:1px solid var(--line);margin-top:6px}
+table{border-collapse:separate;border-spacing:0;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:6px 9px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:right}
+th{position:sticky;top:0;background:var(--surface);font-size:11px;color:var(--ink2);text-transform:uppercase;letter-spacing:.02em;z-index:2}
+th:first-child,td:first-child{text-align:left;position:sticky;left:0;z-index:1;background:var(--surface)}
+th:first-child{z-index:3}
+td.tot,th.tot{border-left:1px solid var(--line);font-weight:600}
+tr.lin td{cursor:pointer}
+tr.lin td:first-child{font-weight:600}
+tr.lin.sel td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+tr.cmp td{font-size:13px;color:var(--ink2)}
+tr.cmp td:first-child{padding-left:30px;background:var(--sub)}
+tr.totr td{background:var(--accent-soft);font-weight:700;position:sticky;bottom:0}
+tr.totr td:first-child{background:var(--accent-soft)}
+.caret{display:inline-block;width:14px;color:var(--muted)}
+.cod{color:var(--muted);font-size:12px;margin-left:6px}
+.flag{font-size:11px;color:var(--bad);margin-left:6px}
+.note{color:var(--muted);font-size:12px;padding:4px 24px 28px;max-width:1150px}
+details.card summary{cursor:pointer;padding:12px 14px;font-weight:600}
+.small th,.small td{font-size:12px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Venda mensal por linha — peças e valor faturado</h1>
+  <div class="meta" id="meta">Carregando…</div>
+</header>
+
+<div class="bar">
+  <label>De<select id="fDe"></select></label>
+  <label>Até<select id="fAte"></select></label>
+  <label>Regional<select id="fReg"><option value="">Todas</option></select></label>
+  <label>Representante<select id="fRep"><option value="">Todos</option></select></label>
+  <label>Linha<select id="fLin"><option value="">Todas</option></select></label>
+  <label>Peça<input id="fBusca" placeholder="código ou descrição" size="18"></label>
+  <label>Valor por linha
+    <span class="seg" id="segValor">
+      <button data-v="rateio" class="on" title="O valor de cada item vendido é dividido entre as peças da engenharia, proporcional à quantidade de peças">Rateado nas peças</button>
+      <button data-v="item" title="O valor fica todo na linha do item vendido (Cd_sub_grupo)">Linha do item vendido</button>
+    </span>
+  </label>
+  <label>&nbsp;<button id="btnExp">Expandir peças</button></label>
+  <label>&nbsp;<button id="btnCsv">Exportar CSV</button></label>
+  <label>&nbsp;<button id="btnReload" class="primary">Atualizar dados</button></label>
+</div>
+<div class="status" id="status"></div>
+<div class="tiles" id="tiles"></div>
+
+<section class="card">
+  <div class="card-h"><h2>Quadro 1 · Peças vendidas por linha</h2><span class="sub" id="sub1"></span></div>
+  <div class="chart" id="ch1"></div>
+  <div class="tablebox"><table id="t1"></table></div>
+</section>
+
+<section class="card">
+  <div class="card-h"><h2>Quadro 2 · Valor faturado por linha (R$)</h2><span class="sub" id="sub2"></span></div>
+  <div class="chart" id="ch2"></div>
+  <div class="tablebox"><table id="t2"></table></div>
+</section>
+
+<details class="card" id="boxSem">
+  <summary id="sumSem">Itens vendidos sem engenharia</summary>
+  <div class="tablebox"><table class="small" id="tSem"></table></div>
+</details>
+
+<div class="note">
+  <b>Como os números são calculados.</b>
+  Peças = quantidade vendida × quantidade da peça na engenharia (PEENGENH, Cd_tipo_pcp = 'i', insumos iniciados por 48).
+  Um conjunto vendido aparece aberto nas peças que o compõem, cada uma na sua linha (posições 3–4 do código do insumo).
+  Itens vendidos sem engenharia cadastrada entram como peça da própria linha do item e ficam listados no fim da página.
+  Valor “rateado nas peças” = valor do item vendido dividido entre as suas peças na proporção da quantidade de peças;
+  “linha do item vendido” = valor inteiro na linha do produto faturado (Cd_sub_grupo), sem abertura por peça.
+  Clique no nome da linha para abrir/fechar as peças; clique nos números da linha para ver só ela no gráfico (clique de novo para voltar ao total).
+</div>
+
+<script>
+const WEBHOOK = "http://localhost:5678/webhook/pecas-linha";
+const MES = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+const mesLbl = ym => MES[+ym.slice(5,7)-1] + "/" + ym.slice(2,4);
+const num = (v,d=0) => v==null||isNaN(v) ? "–" : v.toLocaleString("pt-BR",{minimumFractionDigits:d,maximumFractionDigits:d});
+const brl = v => v==null||isNaN(v) ? "–" : v.toLocaleString("pt-BR",{style:"currency",currency:"BRL",maximumFractionDigits:0});
+const compact = v => Math.abs(v)>=1e6 ? num(v/1e6,1)+" mi" : Math.abs(v)>=1e3 ? num(v/1e3,0)+" mil" : num(v,0);
+const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const $ = id => document.getElementById(id);
+
+let D = null, mesesOrd = [];
+const st = { modo:"rateio", open:new Set(), allOpen:false, sel1:null, sel2:null };
+
+async function load(){
+  $("status").textContent = "Buscando dados no n8n… (a consulta pode levar alguns minutos)";
+  $("status").className = "status";
+  try{
+    const r = await fetch(WEBHOOK, {cache:"no-store"});
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    let j = await r.json();
+    if(Array.isArray(j)) j = j[0];
+    if(j && j.json) j = j.json;
+    D = j; prepare(); $("status").textContent = "";
+  }catch(e){
+    $("status").innerHTML = '<span class="err">Não foi possível ler o webhook ('+esc(e.message)+'). Verifique se o n8n está aberto em localhost:5678 e o workflow “API - Peças por Linha” está ativo.</span>';
+  }
+}
+
+function prepare(){
+  mesesOrd = D.meses.map((m,i)=>[m,i]).sort((a,b)=>a[0]<b[0]?-1:1);
+  const opts = mesesOrd.map(([m])=>`<option value="${m}">${mesLbl(m)}</option>`).join("");
+  $("fDe").innerHTML = opts; $("fAte").innerHTML = opts;
+  const last = mesesOrd[mesesOrd.length-1][0];
+  const ini = mesesOrd.find(([m])=>m >= (+last.slice(0,4)-1)+last.slice(4))?.[0] || mesesOrd[0][0];
+  $("fDe").value = ini; $("fAte").value = last;
+  const regs = [...new Set(D.repres.map(r=>r[0]))].sort();
+  $("fReg").innerHTML = '<option value="">Todas</option>' + regs.map(r=>`<option>${esc(r)}</option>`).join("");
+  fillRep();
+  const lins = D.linhas.map((l,i)=>[l,i]).sort((a,b)=>a[0]<b[0]?-1:1);
+  $("fLin").innerHTML = '<option value="">Todas</option>' + lins.map(([l,i])=>`<option value="${i}">Linha ${esc(l)}</option>`).join("");
+  const r = D.resumo || {};
+  $("meta").textContent = "Dados gerados em " + new Date(D.gerado).toLocaleString("pt-BR") +
+    ` · ${num(r.linhasVenda)} itens de nota · ${num(r.linhasEngenharia)} linhas de engenharia`;
+  renderSem(); render();
+}
+
+function fillRep(){
+  const reg = $("fReg").value;
+  const reps = D.repres.map((r,i)=>[r,i]).filter(([r])=>!reg || r[0]===reg).sort((a,b)=>a[0][2].localeCompare(b[0][2]));
+  const cur = $("fRep").value;
+  $("fRep").innerHTML = '<option value="">Todos</option>' + reps.map(([r,i])=>`<option value="${i}">${esc(r[2])} (${esc(r[1])})${reg?"":" · "+esc(r[0])}</option>`).join("");
+  if([...$("fRep").options].some(o=>o.value===cur)) $("fRep").value = cur;
+}
+
+/* ---------- agregação ---------- */
+function filtros(){
+  let de = $("fDe").value, ate = $("fAte").value; if(de>ate) [de,ate]=[ate,de];
+  const cols = mesesOrd.filter(([m])=>m>=de && m<=ate);
+  const colPos = new Map(cols.map(([m,i],p)=>[i,p]));
+  const reg = $("fReg").value, rep = $("fRep").value, lin = $("fLin").value;
+  const q = $("fBusca").value.trim().toUpperCase();
+  const repOk = D.repres.map((r,i)=> (!reg || r[0]===reg) && (rep==="" || +rep===i));
+  const cmpOk = D.comps.map(c=> (lin==="" || c[1]===+lin) && (!q || c[0].toUpperCase().includes(q) || String(c[3]||"").toUpperCase().includes(q)));
+  return {cols, colPos, repOk, cmpOk, lin, q};
+}
+
+function agregar(){
+  const F = filtros(), n = F.cols.length;
+  const novo = () => ({v:new Float64Array(n), cmp:new Map()});
+  const P = new Map(), V = new Map();   // linhaIdx -> {v, cmp: compIdx -> Float64Array}
+  const add = (M, l, c, p, x) => {
+    let o = M.get(l); if(!o){ o = novo(); M.set(l,o); }
+    o.v[p] += x;
+    if(c!=null){ let a = o.cmp.get(c); if(!a){ a = new Float64Array(n); o.cmp.set(c,a); } a[p] += x; }
+  };
+  for(const [m,r,c,pc,val] of D.fatos){
+    const p = F.colPos.get(m); if(p===undefined || !F.repOk[r] || !F.cmpOk[c]) continue;
+    const l = D.comps[c][1];
+    add(P, l, c, p, pc);
+    if(st.modo==="rateio") add(V, l, c, p, val);
+  }
+  if(st.modo==="item" && !F.q){
+    for(const [m,r,l,val] of D.valorItem){
+      const p = F.colPos.get(m); if(p===undefined || !F.repOk[r] || (F.lin!=="" && l!==+F.lin)) continue;
+      add(V, l, null, p, val);
+    }
+  }
+  return {F, P, V};
+}
+
+/* ---------- render ---------- */
+function render(){
+  if(!D) return;
+  const A = agregar(), cols = A.F.cols;
+  const sum = M => { let t = 0; for(const o of M.values()) for(const x of o.v) t += x; return t; };
+  const tp = sum(A.P), tv = sum(A.V);
+  const linhasVend = [...A.P.values()].filter(o=>o.v.some(x=>x>0)).length;
+  const pecasDist = new Set(); for(const o of A.P.values()) for(const [c,a] of o.cmp) if(a.some(x=>x>0)) pecasDist.add(c);
+  const nm = cols.length || 1;
+  $("tiles").innerHTML = [
+    ["Peças vendidas", num(tp), `média ${num(tp/nm)} por mês`],
+    ["Valor faturado", brl(tv), `média ${brl(tv/nm)} por mês`],
+    ["Valor médio por peça", tp ? (tv/tp).toLocaleString("pt-BR",{style:"currency",currency:"BRL"}) : "–", "valor ÷ peças"],
+    ["Linhas vendidas", num(linhasVend), `${num(pecasDist.size)} peças diferentes`],
+    ["Período", cols.length ? `${mesLbl(cols[0][0])} a ${mesLbl(cols[cols.length-1][0])}` : "–", `${cols.length} meses`]
+  ].map(([k,v,s])=>`<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
+  $("sub1").textContent = "quantidade × engenharia, conjuntos abertos em peças";
+  $("sub2").textContent = st.modo==="rateio" ? "valor rateado entre as peças de cada item vendido" :
+    (A.F.q ? "filtro de peça não se aplica neste modo — limpe o campo Peça" : "valor na linha do item vendido (sem abertura por peça)");
+  tabela("t1", A.P, cols, v=>num(v), 1, A.P);
+  tabela("t2", A.V, cols, v=>v ? compact(v) : "–", 2, A.P, v=>brl(v));
+  grafico("ch1", A.P, cols, st.sel1, v=>num(v)+" peças", compact);
+  grafico("ch2", A.V, cols, st.sel2, v=>brl(v), compact);
+}
+
+function tabela(id, M, cols, fmt, q, Pref, fmtTot){
+  fmtTot = fmtTot || fmt;
+  const n = cols.length;
+  const rows = [...M.entries()].map(([l,o])=>({l, o, t:o.v.reduce((a,b)=>a+b,0)})).filter(r=>r.t!==0).sort((a,b)=>b.t-a.t);
+  const total = new Float64Array(n); rows.forEach(r=>r.o.v.forEach((x,i)=>total[i]+=x));
+  const gt = total.reduce((a,b)=>a+b,0);
+  let max = 0; rows.forEach(r=>r.o.v.forEach(x=>{ if(x>max) max=x; }));
+  const heat = (x,mx) => x>0 && mx>0 ? `style="background:color-mix(in srgb, var(--heat) ${Math.round(6+44*x/mx)}%, transparent)"` : "";
+  const sel = q===1 ? st.sel1 : st.sel2;
+  let h = `<thead><tr><th>Linha / peça</th>${cols.map(([m])=>`<th>${mesLbl(m)}</th>`).join("")}<th class="tot">Total</th><th>% total</th><th>Média/mês</th></tr></thead><tbody>`;
+  for(const r of rows){
+    const key = "L"+r.l, open = st.allOpen || st.open.has(key);
+    const temCmp = r.o.cmp.size>0;
+    h += `<tr class="lin${sel===r.l?" sel":""}" data-l="${r.l}" data-k="${key}"><td><span class="caret">${temCmp?(open?"▾":"▸"):""}</span>Linha ${esc(D.linhas[r.l])}</td>` +
+      [...r.o.v].map(x=>`<td ${heat(x,max)}>${x?fmt(x):"–"}</td>`).join("") +
+      `<td class="tot">${fmtTot(r.t)}</td><td>${num(gt? r.t/gt*100:0,1)}%</td><td>${fmtTot(r.t/(n||1))}</td></tr>`;
+    if(open && temCmp){
+      const cs = [...r.o.cmp.entries()].map(([c,a])=>({c,a,t:a.reduce((x,y)=>x+y,0)})).filter(x=>x.t!==0).sort((a,b)=>b.t-a.t);
+      let cmax = 0; cs.forEach(x=>x.a.forEach(v=>{ if(v>cmax) cmax=v; }));
+      for(const x of cs){
+        const c = D.comps[x.c];
+        h += `<tr class="cmp"><td>${esc(c[3]||"Peça "+c[2])}<span class="cod">${esc(c[0])}</span>${c[4]?'<span class="flag">sem engenharia</span>':""}</td>` +
+          [...x.a].map(v=>`<td ${heat(v,cmax)}>${v?fmt(v):"–"}</td>`).join("") +
+          `<td class="tot">${fmtTot(x.t)}</td><td>${num(gt? x.t/gt*100:0,1)}%</td><td>${fmtTot(x.t/(n||1))}</td></tr>`;
+      }
+    }
+  }
+  h += `<tr class="totr"><td>Total</td>${[...total].map(x=>`<td>${x?fmt(x):"–"}</td>`).join("")}<td class="tot">${fmtTot(gt)}</td><td>100%</td><td>${fmtTot(gt/(n||1))}</td></tr></tbody>`;
+  if(!rows.length) h = `<tbody><tr><td class="muted">Sem vendas para os filtros escolhidos.</td></tr></tbody>`;
+  const t = $(id); t.innerHTML = h;
+  t.querySelectorAll("tr.lin").forEach(tr=>tr.addEventListener("click", ev=>{
+    const l = +tr.dataset.l, k = tr.dataset.k;
+    if(ev.target.closest("td:first-child")){
+      if(st.allOpen){ st.allOpen = false; D.linhas.forEach((_,i)=>st.open.add("L"+i)); $("btnExp").textContent = "Expandir peças"; }
+      st.open.has(k) ? st.open.delete(k) : st.open.add(k);
+    } else if(q===1) st.sel1 = st.sel1===l ? null : l; else st.sel2 = st.sel2===l ? null : l;
+    render();
+  }));
+}
+
+function grafico(id, M, cols, selL, fmtTip, fmtAx){
+  const n = cols.length, vals = new Float64Array(n);
+  if(selL!=null && M.get(selL)) M.get(selL).v.forEach((x,i)=>vals[i]=x);
+  else if(selL==null) for(const o of M.values()) o.v.forEach((x,i)=>vals[i]+=x);
+  const W = 1000, H = 170, L = 52, Rm = 8, Tp = 22, B = 22;
+  const mx = Math.max(...vals, 0) || 1;
+  const nice = (() => { const p = 10**Math.floor(Math.log10(mx)); for(const k of [1,2,2.5,5,10]) if(k*p>=mx) return k*p; return 10*p; })();
+  const y = v => Tp + (H-Tp-B) * (1 - v/nice), bw = (W-L-Rm)/Math.max(n,1), w = Math.max(2, Math.min(36, bw*0.62));
+  const titulo = selL==null ? "Total do filtro" : "Linha " + D.linhas[selL];
+  let s = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${titulo} por mês">`;
+  s += `<text class="axis" x="${L}" y="12" style="font-size:11px;font-weight:600;fill:var(--ink2)">${esc(titulo)} por mês</text>`;
+  for(let k=0;k<=2;k++){ const v = nice*k/2, yy = y(v); s += `<line class="grid" x1="${L}" x2="${W-Rm}" y1="${yy}" y2="${yy}"/><text class="axis" x="${L-6}" y="${yy+3}" text-anchor="end">${fmtAx(v)}</text>`; }
+  cols.forEach(([m],i)=>{
+    const cx = L + bw*i + bw/2, v = vals[i], top = y(v), hgt = Math.max(0, H-B-top), r = Math.min(4, w/2, hgt);
+    const d = hgt>0 ? `M${cx-w/2},${H-B} V${top+r} Q${cx-w/2},${top} ${cx-w/2+r},${top} H${cx+w/2-r} Q${cx+w/2},${top} ${cx+w/2},${top+r} V${H-B} Z` : "";
+    s += `<rect class="hit" x="${L+bw*i}" y="${Tp}" width="${bw}" height="${H-Tp-B}" fill="transparent" data-i="${i}"/>`;
+    s += `<path class="b" d="${d}" data-i="${i}"/>`;
+    if(n<=24 || i%2===0) s += `<text class="axis" x="${cx}" y="${H-7}" text-anchor="middle">${mesLbl(m)}</text>`;
+  });
+  s += `</svg><div class="tip"></div>`;
+  const box = $(id); box.innerHTML = s;
+  const tip = box.querySelector(".tip"), svg = box.querySelector("svg");
+  svg.querySelectorAll(".hit").forEach(rc=>{
+    rc.addEventListener("mousemove", ev=>{
+      const i = +rc.dataset.i, bb = box.getBoundingClientRect();
+      tip.style.display = "block"; tip.style.left = (ev.clientX-bb.left)+"px"; tip.style.top = (ev.clientY-bb.top)+"px";
+      tip.innerHTML = `<b>${mesLbl(cols[i][0])}</b> · ${fmtTip(vals[i])}`;
+      svg.querySelectorAll(".b").forEach(b=>b.classList.toggle("hov", +b.dataset.i===i));
+    });
+    rc.addEventListener("mouseleave", ()=>{ tip.style.display="none"; svg.querySelectorAll(".b.hov").forEach(b=>b.classList.remove("hov")); });
+  });
+}
+
+function renderSem(){
+  const S = D.semEngenharia || [];
+  $("sumSem").textContent = `Itens vendidos sem engenharia (${num(S.length)}) — entram como peça da própria linha`;
+  $("tSem").innerHTML = `<thead><tr><th>Item vendido</th><th>Descrição</th><th>Quantidade</th><th>Valor</th></tr></thead><tbody>` +
+    S.map(s=>`<tr><td>${esc(s[0])}</td><td style="text-align:left">${esc(s[1])}</td><td>${num(s[2])}</td><td>${brl(s[3])}</td></tr>`).join("") + "</tbody>";
+}
+
+function csv(){
+  if(!D) return;
+  const A = agregar(), cols = A.F.cols, out = [];
+  const head = ["Quadro","Linha","Peça","Descrição",...cols.map(([m])=>m),"Total"];
+  out.push(head);
+  for(const [nome,M] of [["Peças",A.P],["Valor",A.V]]){
+    for(const [l,o] of M){
+      out.push([nome, D.linhas[l], "", "", ...[...o.v].map(x=>x.toFixed(2).replace(".",",")), o.v.reduce((a,b)=>a+b,0).toFixed(2).replace(".",",")]);
+      for(const [c,a] of o.cmp){ const cc = D.comps[c];
+        out.push([nome, D.linhas[l], cc[0], cc[3]||"", ...[...a].map(x=>x.toFixed(2).replace(".",",")), a.reduce((x,y)=>x+y,0).toFixed(2).replace(".",",")]); }
+    }
+  }
+  const txt = "﻿" + out.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\r\n");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt],{type:"text/csv"}));
+  a.download = "venda_por_linha.csv"; a.click();
+}
+
+["fDe","fAte","fRep","fLin"].forEach(i=>$(i).addEventListener("change", render));
+$("fReg").addEventListener("change", ()=>{ fillRep(); render(); });
+let tb; $("fBusca").addEventListener("input", ()=>{ clearTimeout(tb); tb = setTimeout(render, 250); });
+$("segValor").addEventListener("click", ev=>{ const b = ev.target.closest("button"); if(!b) return;
+  st.modo = b.dataset.v; $("segValor").querySelectorAll("button").forEach(x=>x.classList.toggle("on", x===b)); st.sel2 = null; render(); });
+$("btnExp").addEventListener("click", ()=>{ st.allOpen = !st.allOpen; if(!st.allOpen) st.open.clear(); $("btnExp").textContent = st.allOpen ? "Recolher peças" : "Expandir peças"; render(); });
+$("btnCsv").addEventListener("click", csv);
+$("btnReload").addEventListener("click", load);
+load();
+</script>
+</body>
+</html>

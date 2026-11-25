@@ -129,6 +129,7 @@ const brl = v => v==null||isNaN(v) ? "–" : v.toLocaleString("pt-BR",{style:"cu
 const compact = v => Math.abs(v)>=1e6 ? num(v/1e6,1)+" mi" : Math.abs(v)>=1e3 ? num(v/1e3,0)+" mil" : num(v,0);
 const esc = s => String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const $ = id => document.getElementById(id);
+const nomeLinha = l => (D.linhasNome && D.linhasNome[l]) || ("Linha " + D.linhas[l]);
 
 let D = null, mesesOrd = [];
 const st = { modo:"rateio", open:new Set(), allOpen:false, sel1:null, sel2:null };
@@ -158,8 +159,8 @@ function prepare(){
   const regs = [...new Set(D.repres.map(r=>r[0]))].sort();
   $("fReg").innerHTML = '<option value="">Todas</option>' + regs.map(r=>`<option>${esc(r)}</option>`).join("");
   fillRep();
-  const lins = D.linhas.map((l,i)=>[l,i]).sort((a,b)=>a[0]<b[0]?-1:1);
-  $("fLin").innerHTML = '<option value="">Todas</option>' + lins.map(([l,i])=>`<option value="${i}">Linha ${esc(l)}</option>`).join("");
+  const lins = D.linhas.map((l,i)=>[l,i]).sort((a,b)=>nomeLinha(a[1]).localeCompare(nomeLinha(b[1])));
+  $("fLin").innerHTML = '<option value="">Todas</option>' + lins.map(([l,i])=>`<option value="${i}">${esc(nomeLinha(i))} (${esc(l)})</option>`).join("");
   const r = D.resumo || {};
   $("meta").textContent = "Dados gerados em " + new Date(D.gerado).toLocaleString("pt-BR") +
     ` · ${num(r.linhasVenda)} itens de nota · ${num(r.linhasEngenharia)} linhas de engenharia`;
@@ -248,7 +249,7 @@ function tabela(id, M, cols, fmt, q, Pref, fmtTot){
   for(const r of rows){
     const key = "L"+r.l, open = st.allOpen || st.open.has(key);
     const temCmp = r.o.cmp.size>0;
-    h += `<tr class="lin${sel===r.l?" sel":""}" data-l="${r.l}" data-k="${key}"><td><span class="caret">${temCmp?(open?"▾":"▸"):""}</span>Linha ${esc(D.linhas[r.l])}</td>` +
+    h += `<tr class="lin${sel===r.l?" sel":""}" data-l="${r.l}" data-k="${key}"><td><span class="caret">${temCmp?(open?"▾":"▸"):""}</span>${esc(nomeLinha(r.l))}<span class="cod">${esc(D.linhas[r.l])}</span></td>` +
       [...r.o.v].map(x=>`<td ${heat(x,max)}>${x?fmt(x):"–"}</td>`).join("") +
       `<td class="tot">${fmtTot(r.t)}</td><td>${num(gt? r.t/gt*100:0,1)}%</td><td>${fmtTot(r.t/(n||1))}</td></tr>`;
     if(open && temCmp){
@@ -283,7 +284,7 @@ function grafico(id, M, cols, selL, fmtTip, fmtAx){
   const mx = Math.max(...vals, 0) || 1;
   const nice = (() => { const p = 10**Math.floor(Math.log10(mx)); for(const k of [1,2,2.5,5,10]) if(k*p>=mx) return k*p; return 10*p; })();
   const y = v => Tp + (H-Tp-B) * (1 - v/nice), bw = (W-L-Rm)/Math.max(n,1), w = Math.max(2, Math.min(36, bw*0.62));
-  const titulo = selL==null ? "Total do filtro" : "Linha " + D.linhas[selL];
+  const titulo = selL==null ? "Total do filtro" : nomeLinha(selL);
   let s = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${titulo} por mês">`;
   s += `<text class="axis" x="${L}" y="12" style="font-size:11px;font-weight:600;fill:var(--ink2)">${esc(titulo)} por mês</text>`;
   for(let k=0;k<=2;k++){ const v = nice*k/2, yy = y(v); s += `<line class="grid" x1="${L}" x2="${W-Rm}" y1="${yy}" y2="${yy}"/><text class="axis" x="${L-6}" y="${yy+3}" text-anchor="end">${fmtAx(v)}</text>`; }
@@ -318,13 +319,13 @@ function renderSem(){
 function csv(){
   if(!D) return;
   const A = agregar(), cols = A.F.cols, out = [];
-  const head = ["Quadro","Linha","Peça","Descrição",...cols.map(([m])=>m),"Total"];
+  const head = ["Quadro","Linha","Nome da linha","Peça","Descrição",...cols.map(([m])=>m),"Total"];
   out.push(head);
   for(const [nome,M] of [["Peças",A.P],["Valor",A.V]]){
     for(const [l,o] of M){
-      out.push([nome, D.linhas[l], "", "", ...[...o.v].map(x=>x.toFixed(2).replace(".",",")), o.v.reduce((a,b)=>a+b,0).toFixed(2).replace(".",",")]);
+      out.push([nome, D.linhas[l], nomeLinha(l), "", "", ...[...o.v].map(x=>x.toFixed(2).replace(".",",")), o.v.reduce((a,b)=>a+b,0).toFixed(2).replace(".",",")]);
       for(const [c,a] of o.cmp){ const cc = D.comps[c];
-        out.push([nome, D.linhas[l], cc[0], cc[3]||"", ...[...a].map(x=>x.toFixed(2).replace(".",",")), a.reduce((x,y)=>x+y,0).toFixed(2).replace(".",",")]); }
+        out.push([nome, D.linhas[l], nomeLinha(l), cc[0], cc[3]||"", ...[...a].map(x=>x.toFixed(2).replace(".",",")), a.reduce((x,y)=>x+y,0).toFixed(2).replace(".",",")]); }
     }
   }
   const txt = "﻿" + out.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\r\n");

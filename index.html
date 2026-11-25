@@ -25,6 +25,16 @@ h2{font-size:15px;margin:0;font-weight:650}
 select,input,button{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 9px}
 button{cursor:pointer}
 button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.bar .lbl{display:flex;flex-direction:column;font-size:11px;color:var(--muted);gap:3px;text-transform:uppercase;letter-spacing:.03em}
+.ms{position:relative}
+.ms-btn{min-width:150px;max-width:240px;text-align:left;text-transform:none;letter-spacing:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:24px;position:relative}
+.ms-btn::after{content:"▾";position:absolute;right:8px;color:var(--muted)}
+.ms-pop{display:none;position:absolute;top:calc(100% + 4px);left:0;z-index:20;background:var(--surface);border:1px solid var(--line);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.12);padding:6px;max-height:320px;overflow:auto;min-width:220px}
+.ms.aberto .ms-pop{display:block}
+.ms-acoes{display:flex;gap:6px;padding:2px 2px 6px;border-bottom:1px solid var(--line);margin-bottom:4px}
+.ms-acoes button{padding:3px 8px;font-size:12px}
+.ms-op{display:flex !important;flex-direction:row !important;align-items:center;gap:8px;padding:5px 6px;border-radius:5px;cursor:pointer;color:var(--ink) !important;font-size:13px !important;text-transform:none !important;letter-spacing:0 !important}
+.ms-op:hover{background:var(--accent-soft)}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .seg button{border:0;border-radius:0;padding:6px 10px}
 .seg button.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
@@ -65,6 +75,7 @@ tr.totr td:first-child{background:var(--accent-soft)}
 .note{color:var(--muted);font-size:12px;padding:4px 24px 28px;max-width:1150px}
 .up,table tr td.up{color:var(--good)} .down,table tr td.down{color:var(--bad)}
 .filtro-print{display:none}
+.pf{display:none}
 @media print{
   @page{size:A4 landscape;margin:8mm}
   body{background:#fff;color:#000;font-size:9px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -82,6 +93,8 @@ tr.totr td:first-child{background:var(--accent-soft)}
   tr.cmp td:first-child{padding-left:12px}
   .cod,.flag{font-size:7px}
   .card-h{break-after:avoid}
+  section.quadro + section.quadro{break-before:page}
+  .pf{display:block;flex-basis:100%;font-size:8px;color:#333}
   .chart{break-inside:avoid;break-after:avoid}
   th{position:static}
   th:first-child,td:first-child{position:static}
@@ -104,7 +117,7 @@ details.card summary{cursor:pointer;padding:12px 14px;font-weight:600}
 <div class="bar">
   <label>De<select id="fDe"></select></label>
   <label>Até<select id="fAte"></select></label>
-  <label>Regional<select id="fReg"><option value="">Todas</option></select></label>
+  <div class="lbl">Regional<div class="ms" id="fReg"><button type="button" class="ms-btn" id="fRegBtn">Todas</button><div class="ms-pop" id="fRegPop"></div></div></div>
   <label>Representante<select id="fRep"><option value="">Todos</option></select></label>
   <label>Linha<select id="fLin"><option value="">Todas</option></select></label>
   <label>Peça<input id="fBusca" placeholder="código ou descrição" size="18"></label>
@@ -123,20 +136,20 @@ details.card summary{cursor:pointer;padding:12px 14px;font-weight:600}
 <div class="filtro-print"><span id="resumoFiltro"></span> <span id="dataImpressao"></span></div>
 <div class="tiles" id="tiles"></div>
 
-<section class="card">
-  <div class="card-h"><h2>Quadro 1 · Peças vendidas por linha</h2><span class="sub" id="sub1"></span></div>
+<section class="card quadro">
+  <div class="card-h"><h2>Quadro 1 · Peças vendidas por linha</h2><span class="sub" id="sub1"></span><div class="pf"></div></div>
   <div class="chart" id="ch1"></div>
   <div class="tablebox"><table id="t1"></table></div>
 </section>
 
-<section class="card">
-  <div class="card-h"><h2>Quadro 2 · Valor faturado por linha (R$)</h2><span class="sub" id="sub2"></span></div>
+<section class="card quadro">
+  <div class="card-h"><h2>Quadro 2 · Valor faturado por linha (R$)</h2><span class="sub" id="sub2"></span><div class="pf"></div></div>
   <div class="chart" id="ch2"></div>
   <div class="tablebox"><table id="t2"></table></div>
 </section>
 
-<section class="card">
-  <div class="card-h"><h2>Quadro 3 · Valor médio da venda por peça (R$)</h2><span class="sub" id="sub3"></span></div>
+<section class="card quadro">
+  <div class="card-h"><h2>Quadro 3 · Valor médio da venda por peça (R$)</h2><span class="sub" id="sub3"></span><div class="pf"></div></div>
   <div class="tablebox"><table id="t3"></table></div>
 </section>
 
@@ -168,7 +181,7 @@ const $ = id => document.getElementById(id);
 const nomeLinha = l => (D.linhasNome && D.linhasNome[l]) || ("Linha " + D.linhas[l]);
 
 let D = null, mesesOrd = [];
-const st = { modo:"rateio", open:new Set(), allOpen:false, sel1:null, sel2:null };
+const st = { regs:new Set(), modo:"rateio", open:new Set(), allOpen:false, sel1:null, sel2:null };
 
 async function load(){
   $("status").textContent = "Buscando dados no n8n… (a consulta pode levar alguns minutos)";
@@ -193,7 +206,10 @@ function prepare(){
   const ini = mesesOrd.find(([m])=>m >= (+last.slice(0,4)-1)+last.slice(4))?.[0] || mesesOrd[0][0];
   $("fDe").value = ini; $("fAte").value = last;
   const regs = [...new Set(D.repres.map(r=>r[0]))].sort();
-  $("fReg").innerHTML = '<option value="">Todas</option>' + regs.map(r=>`<option>${esc(r)}</option>`).join("");
+  const antes = st.regs; st.regs = new Set(regs.filter(r=>antes.has(r)));
+  $("fRegPop").innerHTML = `<div class="ms-acoes"><button type="button" data-a="todas">Todas</button><button type="button" data-a="limpar">Limpar</button></div>` +
+    regs.map(r=>`<label class="ms-op"><input type="checkbox" value="${esc(r)}"${st.regs.has(r)?" checked":""}> ${esc(r)}</label>`).join("");
+  regBtn();
   fillRep();
   const lins = D.linhas.map((l,i)=>[l,i]).sort((a,b)=>nomeLinha(a[1]).localeCompare(nomeLinha(b[1])));
   $("fLin").innerHTML = '<option value="">Todas</option>' + lins.map(([l,i])=>`<option value="${i}">${esc(nomeLinha(i))} (${esc(l)})</option>`).join("");
@@ -204,8 +220,8 @@ function prepare(){
 }
 
 function fillRep(){
-  const reg = $("fReg").value;
-  const reps = D.repres.map((r,i)=>[r,i]).filter(([r])=>!reg || r[0]===reg).sort((a,b)=>a[0][2].localeCompare(b[0][2]));
+  const reg = st.regs.size===1;
+  const reps = D.repres.map((r,i)=>[r,i]).filter(([r])=>!st.regs.size || st.regs.has(r[0])).sort((a,b)=>a[0][2].localeCompare(b[0][2]));
   const cur = $("fRep").value;
   $("fRep").innerHTML = '<option value="">Todos</option>' + reps.map(([r,i])=>`<option value="${i}">${esc(r[2])} (${esc(r[1])})${reg?"":" · "+esc(r[0])}</option>`).join("");
   if([...$("fRep").options].some(o=>o.value===cur)) $("fRep").value = cur;
@@ -220,9 +236,9 @@ function filtros(){
   const mIdx = new Map(D.meses.map((m,i)=>[m,i]));
   const antPos = new Map(); let antFalta = 0;
   cols.forEach(([m],p)=>{ const pm = (+m.slice(0,4)-1) + m.slice(4); const i = mIdx.get(pm); if(i===undefined) antFalta++; else antPos.set(i,p); });
-  const reg = $("fReg").value, rep = $("fRep").value, lin = $("fLin").value;
+  const rep = $("fRep").value, lin = $("fLin").value;
   const q = $("fBusca").value.trim().toUpperCase();
-  const repOk = D.repres.map((r,i)=> (!reg || r[0]===reg) && (rep==="" || +rep===i));
+  const repOk = D.repres.map((r,i)=> (!st.regs.size || st.regs.has(r[0])) && (rep==="" || +rep===i));
   const cmpOk = D.comps.map(c=> (lin==="" || c[1]===+lin) && (!q || c[0].toUpperCase().includes(q) || String(c[3]||"").toUpperCase().includes(q)));
   return {cols, colPos, antPos, antFalta, repOk, cmpOk, lin, q};
 }
@@ -307,6 +323,7 @@ function render(){
     (A.F.q ? "filtro de peça não se aplica neste modo — limpe o campo Peça" : "valor na linha do item vendido (sem abertura por peça)")) + aviso;
   $("sub3").textContent = "valor faturado ÷ quantidade de peças" + aviso;
   $("resumoFiltro").textContent = resumoFiltro(cols);
+  document.querySelectorAll(".pf").forEach(e=>e.textContent = $("resumoFiltro").textContent);
   tabela("t1", linhasDe(A.P), cols, {fmt:v=>num(v), fmtTot:v=>num(v), sel:"sel1"});
   tabela("t2", linhasDe(A.V), cols, {fmt:v=>num(v), fmtTot:v=>brl(v), sel:"sel2"});
   tabela("t3", precoMedio(A.P, A.V, cols.length), cols, {fmt:v=>num(v,2), fmtTot:v=>num(v,2), media:false, heat:false, totalRow:[pm,pma], cols3:true});
@@ -318,7 +335,7 @@ function resumoFiltro(cols){
   const t = s => s.options[s.selectedIndex]?.text || "";
   const p = [];
   if(cols.length) p.push(`Período ${mesLbl(cols[0][0])} a ${mesLbl(cols[cols.length-1][0])}`);
-  p.push("Regional: " + t($("fReg")), "Representante: " + t($("fRep")), "Linha: " + t($("fLin")));
+  p.push("Regional: " + (st.regs.size ? [...st.regs].sort().join(", ") : "Todas"), "Representante: " + t($("fRep")), "Linha: " + t($("fLin")));
   if($("fBusca").value.trim()) p.push("Peça: " + $("fBusca").value.trim());
   p.push("Valor: " + (st.modo==="rateio" ? "rateado nas peças" : "linha do item vendido"));
   return p.join(" · ");
@@ -432,7 +449,24 @@ function pdf(){
 }
 
 ["fDe","fAte","fRep","fLin"].forEach(i=>$(i).addEventListener("change", render));
-$("fReg").addEventListener("change", ()=>{ fillRep(); render(); });
+function regBtn(){
+  const n = st.regs.size, b = $("fRegBtn");
+  b.textContent = !n ? "Todas" : n===1 ? [...st.regs][0] : `${n} regionais`;
+  b.title = n ? [...st.regs].sort().join(", ") : "Todas as regionais";
+}
+function regMudou(){
+  st.regs = new Set([...$("fRegPop").querySelectorAll("input:checked")].map(x=>x.value));
+  regBtn(); fillRep(); render();
+}
+$("fRegBtn").addEventListener("click", ev=>{ ev.stopPropagation(); $("fReg").classList.toggle("aberto"); });
+$("fRegPop").addEventListener("click", ev=>{
+  ev.stopPropagation();
+  const a = ev.target.closest("button[data-a]"); if(!a) return;
+  $("fRegPop").querySelectorAll("input").forEach(x=>x.checked = a.dataset.a==="todas");
+  regMudou();
+});
+$("fRegPop").addEventListener("change", regMudou);
+document.addEventListener("click", ()=>$("fReg").classList.remove("aberto"));
 let tb; $("fBusca").addEventListener("input", ()=>{ clearTimeout(tb); tb = setTimeout(render, 250); });
 $("segValor").addEventListener("click", ev=>{ const b = ev.target.closest("button"); if(!b) return;
   st.modo = b.dataset.v; $("segValor").querySelectorAll("button").forEach(x=>x.classList.toggle("on", x===b)); st.sel2 = null; render(); });

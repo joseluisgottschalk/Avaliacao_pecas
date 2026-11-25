@@ -76,6 +76,7 @@ tr.totr td:first-child{background:var(--accent-soft)}
 .up,table tr td.up{color:var(--good)} .down,table tr td.down{color:var(--bad)}
 .filtro-print{display:none}
 .pf{display:none}
+.quebra{display:none}
 @media print{
   @page{size:A4 landscape;margin:8mm}
   body{background:#fff;color:#000;font-size:9px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
@@ -93,7 +94,8 @@ tr.totr td:first-child{background:var(--accent-soft)}
   tr.cmp td:first-child{padding-left:12px}
   .cod,.flag{font-size:7px}
   .card-h{break-after:avoid}
-  section.quadro + section.quadro{break-before:page}
+  .quebra{display:block;height:0;margin:0;padding:0;border:0;break-after:page;page-break-after:always}
+  section.quadro.pag{break-before:page;page-break-before:always}
   .pf{display:block;flex-basis:100%;font-size:8px;color:#333}
   .chart{break-inside:avoid;break-after:avoid}
   th{position:static}
@@ -142,13 +144,15 @@ details.card summary{cursor:pointer;padding:12px 14px;font-weight:600}
   <div class="tablebox"><table id="t1"></table></div>
 </section>
 
-<section class="card quadro">
+<div class="quebra"></div>
+<section class="card quadro pag">
   <div class="card-h"><h2>Quadro 2 · Valor faturado por linha (R$)</h2><span class="sub" id="sub2"></span><div class="pf"></div></div>
   <div class="chart" id="ch2"></div>
   <div class="tablebox"><table id="t2"></table></div>
 </section>
 
-<section class="card quadro">
+<div class="quebra"></div>
+<section class="card quadro pag">
   <div class="card-h"><h2>Quadro 3 · Valor médio da venda por peça (R$)</h2><span class="sub" id="sub3"></span><div class="pf"></div></div>
   <div class="tablebox"><table id="t3"></table></div>
 </section>

@@ -76,6 +76,7 @@ tr.totr td:first-child{background:var(--accent-soft)}
 .up,table tr td.up{color:var(--good)} .down,table tr td.down{color:var(--bad)}
 .filtro-print{display:none}
 .pf{display:none}
+.mercado{display:inline-block;vertical-align:middle;margin-left:8px;padding:2px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:13px;font-weight:700;letter-spacing:.03em}
 .quebra{display:none}
 @media print{
   @page{size:A4 landscape;margin:8mm}
@@ -112,7 +113,7 @@ details.card summary{cursor:pointer;padding:12px 14px;font-weight:600}
 </head>
 <body>
 <header>
-  <h1>Venda mensal por linha — peças e valor faturado</h1>
+  <h1>Venda mensal por linha — peças e valor faturado <span class="mercado" id="mercado" title="MI = mercado interno · ME = mercado externo (regional Exportação)"></span></h1>
   <div class="meta" id="meta">Carregando…</div>
 </header>
 
@@ -326,6 +327,7 @@ function render(){
   $("sub2").textContent = (st.modo==="rateio" ? "valor rateado entre as peças de cada item vendido" :
     (A.F.q ? "filtro de peça não se aplica neste modo — limpe o campo Peça" : "valor na linha do item vendido (sem abertura por peça)")) + aviso;
   $("sub3").textContent = "valor faturado ÷ quantidade de peças" + aviso;
+  $("mercado").textContent = mercado();
   $("resumoFiltro").textContent = resumoFiltro(cols);
   document.querySelectorAll(".pf").forEach(e=>e.textContent = $("resumoFiltro").textContent);
   tabela("t1", linhasDe(A.P), cols, {fmt:v=>num(v), fmtTot:v=>num(v), sel:"sel1"});
@@ -335,9 +337,17 @@ function render(){
   grafico("ch2", A.V, cols, st.sel2, v=>brl(v), v=>num(v));
 }
 
+// MI/ME quando a regional Exportação está incluída (todas as regionais ou marcada); MI quando não está
+const ehExport = r => String(r).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().startsWith("EXPORT");
+function mercado(){
+  if(!D) return "";
+  const regs = st.regs.size ? [...st.regs] : D.repres.map(r=>r[0]);
+  return regs.some(ehExport) ? "MI/ME" : "MI";
+}
+
 function resumoFiltro(cols){
   const t = s => s.options[s.selectedIndex]?.text || "";
-  const p = [];
+  const p = [mercado()];
   if(cols.length) p.push(`Período ${mesLbl(cols[0][0])} a ${mesLbl(cols[cols.length-1][0])}`);
   p.push("Regional: " + (st.regs.size ? [...st.regs].sort().join(", ") : "Todas"), "Representante: " + t($("fRep")), "Linha: " + t($("fLin")));
   if($("fBusca").value.trim()) p.push("Peça: " + $("fBusca").value.trim());

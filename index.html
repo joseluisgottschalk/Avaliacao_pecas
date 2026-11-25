@@ -7,12 +7,12 @@
 <style>
 :root{
   --bg:#f6f7f9; --surface:#ffffff; --ink:#1b1f24; --ink2:#4a5360; --muted:#7a8494;
-  --line:#e3e6eb; --accent:#2a78d6; --accent-soft:#e8eefc; --sub:#f1f3f6; --bad:#b23a3a;
+  --line:#e3e6eb; --accent:#2a78d6; --accent-soft:#e8eefc; --sub:#f1f3f6; --bad:#b23a3a; --good:#1f7a4d;
   --heat:#2a78d6; --bar:#2a78d6; --bar-hi:#184f95;
 }
 @media (prefers-color-scheme: dark){
   :root{--bg:#121417;--surface:#1b1e23;--ink:#e9ecf1;--ink2:#b5bcc7;--muted:#8a93a1;--line:#2c3139;
-  --accent:#3987e5;--accent-soft:#232c44;--sub:#22262c;--bad:#ff8a8a;--heat:#3987e5;--bar:#3987e5;--bar-hi:#86b6ef;}
+  --accent:#3987e5;--accent-soft:#232c44;--sub:#22262c;--bad:#ff8a8a;--good:#5cc38f;--heat:#3987e5;--bar:#3987e5;--bar-hi:#86b6ef;}
 }
 *{box-sizing:border-box}
 body{margin:0;font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
@@ -63,6 +63,34 @@ tr.totr td:first-child{background:var(--accent-soft)}
 .cod{color:var(--muted);font-size:12px;margin-left:6px}
 .flag{font-size:11px;color:var(--bad);margin-left:6px}
 .note{color:var(--muted);font-size:12px;padding:4px 24px 28px;max-width:1150px}
+.up,table tr td.up{color:var(--good)} .down,table tr td.down{color:var(--bad)}
+.filtro-print{display:none}
+@media print{
+  @page{size:A4 landscape;margin:8mm}
+  body{background:#fff;color:#000;font-size:9px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .bar,.status,#btnReload,.tip{display:none !important}
+  header{padding:0 0 4px}
+  h1{font-size:14px}
+  .filtro-print{display:block;padding:0 0 6px;font-size:9px;color:#333}
+  .tiles{padding:0 0 6px;gap:6px;grid-template-columns:repeat(5,1fr)}
+  .tile{padding:5px 7px}.tile .v{font-size:13px}
+  .card{margin:0 0 8px;break-inside:auto}
+  .card-h{padding:6px 8px 2px}
+  .chart svg{height:120px}
+  .tablebox{max-height:none;overflow:visible}
+  th,td,tr.cmp td{padding:2px 4px;font-size:8px}
+  tr.cmp td:first-child{padding-left:12px}
+  .cod,.flag{font-size:7px}
+  .card-h{break-after:avoid}
+  .chart{break-inside:avoid;break-after:avoid}
+  th{position:static}
+  th:first-child,td:first-child{position:static}
+  tr.totr td{position:static}
+  tr{break-inside:avoid}
+  thead{display:table-header-group}
+  details.card:not([open]){display:none}
+  .note{padding:4px 0;font-size:8px}
+}
 details.card summary{cursor:pointer;padding:12px 14px;font-weight:600}
 .small th,.small td{font-size:12px}
 </style>
@@ -88,9 +116,11 @@ details.card summary{cursor:pointer;padding:12px 14px;font-weight:600}
   </label>
   <label>&nbsp;<button id="btnExp">Expandir peças</button></label>
   <label>&nbsp;<button id="btnCsv">Exportar CSV</button></label>
+  <label>&nbsp;<button id="btnPdf">Exportar PDF</button></label>
   <label>&nbsp;<button id="btnReload" class="primary">Atualizar dados</button></label>
 </div>
 <div class="status" id="status"></div>
+<div class="filtro-print"><span id="resumoFiltro"></span> <span id="dataImpressao"></span></div>
 <div class="tiles" id="tiles"></div>
 
 <section class="card">
@@ -105,6 +135,11 @@ details.card summary{cursor:pointer;padding:12px 14px;font-weight:600}
   <div class="tablebox"><table id="t2"></table></div>
 </section>
 
+<section class="card">
+  <div class="card-h"><h2>Quadro 3 · Valor médio da venda por peça (R$)</h2><span class="sub" id="sub3"></span></div>
+  <div class="tablebox"><table id="t3"></table></div>
+</section>
+
 <details class="card" id="boxSem">
   <summary id="sumSem">Itens vendidos sem engenharia</summary>
   <div class="tablebox"><table class="small" id="tSem"></table></div>
@@ -117,6 +152,7 @@ details.card summary{cursor:pointer;padding:12px 14px;font-weight:600}
   Itens vendidos sem engenharia cadastrada entram como peça da própria linha do item e ficam listados no fim da página.
   Valor “rateado nas peças” = valor do item vendido dividido entre as suas peças na proporção da quantidade de peças;
   “linha do item vendido” = valor inteiro na linha do produto faturado (Cd_sub_grupo), sem abertura por peça.
+  Valor médio por peça = valor faturado ÷ quantidade de peças (no mês, no período e no ano anterior). Ano anterior = os mesmos meses do filtro, 12 meses antes, com os mesmos filtros; Var. = período ÷ ano anterior − 1.
   Clique no nome da linha para abrir/fechar as peças; clique nos números da linha para ver só ela no gráfico (clique de novo para voltar ao total).
 </div>
 
@@ -180,98 +216,153 @@ function filtros(){
   let de = $("fDe").value, ate = $("fAte").value; if(de>ate) [de,ate]=[ate,de];
   const cols = mesesOrd.filter(([m])=>m>=de && m<=ate);
   const colPos = new Map(cols.map(([m,i],p)=>[i,p]));
+  // mesmo período do ano anterior: cada mês do filtro deslocado 12 meses
+  const mIdx = new Map(D.meses.map((m,i)=>[m,i]));
+  const antPos = new Map(); let antFalta = 0;
+  cols.forEach(([m],p)=>{ const pm = (+m.slice(0,4)-1) + m.slice(4); const i = mIdx.get(pm); if(i===undefined) antFalta++; else antPos.set(i,p); });
   const reg = $("fReg").value, rep = $("fRep").value, lin = $("fLin").value;
   const q = $("fBusca").value.trim().toUpperCase();
   const repOk = D.repres.map((r,i)=> (!reg || r[0]===reg) && (rep==="" || +rep===i));
   const cmpOk = D.comps.map(c=> (lin==="" || c[1]===+lin) && (!q || c[0].toUpperCase().includes(q) || String(c[3]||"").toUpperCase().includes(q)));
-  return {cols, colPos, repOk, cmpOk, lin, q};
+  return {cols, colPos, antPos, antFalta, repOk, cmpOk, lin, q};
 }
 
 function agregar(){
   const F = filtros(), n = F.cols.length;
-  const novo = () => ({v:new Float64Array(n), cmp:new Map()});
-  const P = new Map(), V = new Map();   // linhaIdx -> {v, cmp: compIdx -> Float64Array}
-  const add = (M, l, c, p, x) => {
-    let o = M.get(l); if(!o){ o = novo(); M.set(l,o); }
-    o.v[p] += x;
-    if(c!=null){ let a = o.cmp.get(c); if(!a){ a = new Float64Array(n); o.cmp.set(c,a); } a[p] += x; }
+  const cel = () => ({v:new Float64Array(n), ant:0});
+  const P = new Map(), V = new Map();   // linha -> {v, ant, cmp: comp -> {v, ant}}
+  const add = (M, l, c, m, x) => {
+    const p = F.colPos.get(m), pa = F.antPos.get(m);
+    if(p===undefined && pa===undefined) return;
+    let o = M.get(l); if(!o){ o = cel(); o.cmp = new Map(); M.set(l,o); }
+    let a = null; if(c!=null){ a = o.cmp.get(c); if(!a){ a = cel(); o.cmp.set(c,a); } }
+    if(p!==undefined){ o.v[p] += x; if(a) a.v[p] += x; }
+    if(pa!==undefined){ o.ant += x; if(a) a.ant += x; }
   };
   for(const [m,r,c,pc,val] of D.fatos){
-    const p = F.colPos.get(m); if(p===undefined || !F.repOk[r] || !F.cmpOk[c]) continue;
+    if(!F.repOk[r] || !F.cmpOk[c]) continue;
     const l = D.comps[c][1];
-    add(P, l, c, p, pc);
-    if(st.modo==="rateio") add(V, l, c, p, val);
+    add(P, l, c, m, pc);
+    if(st.modo==="rateio") add(V, l, c, m, val);
   }
   if(st.modo==="item" && !F.q){
     for(const [m,r,l,val] of D.valorItem){
-      const p = F.colPos.get(m); if(p===undefined || !F.repOk[r] || (F.lin!=="" && l!==+F.lin)) continue;
-      add(V, l, null, p, val);
+      if(!F.repOk[r] || (F.lin!=="" && l!==+F.lin)) continue;
+      add(V, l, null, m, val);
     }
   }
   return {F, P, V};
 }
 
+const soma = a => { let t = 0; for(const x of a) t += x; return t; };
+// transforma o Map em linhas ordenadas para a tabela
+function linhasDe(M){
+  return [...M.entries()].map(([l,o])=>({l, v:o.v, t:soma(o.v), ant:o.ant,
+      cmp:[...o.cmp.entries()].map(([c,a])=>({c, v:a.v, t:soma(a.v), ant:a.ant})).filter(x=>x.t||x.ant).sort((a,b)=>b.t-a.t)}))
+    .filter(r=>r.t||r.ant).sort((a,b)=>b.t-a.t);
+}
+// valor médio por peça = valor ÷ peças (mês a mês, no período e no ano anterior)
+function precoMedio(P, V, n){
+  const div = (a,b) => b ? a/b : NaN;
+  const out = [];
+  for(const [l,o] of V){
+    const p = P.get(l); if(!p) continue;
+    const row = {l, v:Float64Array.from(o.v,(x,i)=>div(x,p.v[i])), t:div(soma(o.v),soma(p.v)), ant:div(o.ant,p.ant), peso:soma(o.v), cmp:[]};
+    for(const [c,a] of o.cmp){ const b = p.cmp.get(c); if(!b) continue;
+      const t = div(soma(a.v),soma(b.v)), an = div(a.ant,b.ant);
+      if(!isNaN(t) || !isNaN(an)) row.cmp.push({c, v:Float64Array.from(a.v,(x,i)=>div(x,b.v[i])), t, ant:an, peso:soma(a.v)}); }
+    row.cmp.sort((a,b)=>b.peso-a.peso);
+    if(!isNaN(row.t) || !isNaN(row.ant)) out.push(row);
+  }
+  return out.sort((a,b)=>b.peso-a.peso);
+}
+
 /* ---------- render ---------- */
+const varPct = (a,b) => b ? (a/b-1)*100 : NaN;
+const varCel = (a,b) => { const x = varPct(a,b); if(isNaN(x) || !isFinite(x)) return `<td class="muted">–</td>`;
+  return `<td class="${x>=0?"up":"down"}">${x>=0?"▲":"▼"} ${num(Math.abs(x),1)}%</td>`; };
+
 function render(){
   if(!D) return;
-  const A = agregar(), cols = A.F.cols;
-  const sum = M => { let t = 0; for(const o of M.values()) for(const x of o.v) t += x; return t; };
-  const tp = sum(A.P), tv = sum(A.V);
-  const linhasVend = [...A.P.values()].filter(o=>o.v.some(x=>x>0)).length;
-  const pecasDist = new Set(); for(const o of A.P.values()) for(const [c,a] of o.cmp) if(a.some(x=>x>0)) pecasDist.add(c);
-  const nm = cols.length || 1;
+  const A = agregar(), cols = A.F.cols, n = cols.length || 1;
+  const sum = M => { let t = 0, a = 0; for(const o of M.values()){ t += soma(o.v); a += o.ant; } return [t,a]; };
+  const [tp, tpa] = sum(A.P), [tv, tva] = sum(A.V);
+  const linhasVend = [...A.P.values()].filter(o=>soma(o.v)>0).length;
+  const pecasDist = new Set(); for(const o of A.P.values()) for(const [c,a] of o.cmp) if(soma(a.v)>0) pecasDist.add(c);
+  const brl2 = v => isNaN(v) ? "–" : v.toLocaleString("pt-BR",{style:"currency",currency:"BRL",minimumFractionDigits:2,maximumFractionDigits:2});
+  const cmp = (a,b,f) => { const x = varPct(a,b); return isNaN(x)||!isFinite(x) ? "sem dado no ano anterior" :
+    `<span class="${x>=0?"up":"down"}">${x>=0?"▲":"▼"} ${num(Math.abs(x),1)}%</span> vs ${f(b)} no ano anterior`; };
+  const pm = tp ? tv/tp : NaN, pma = tpa ? tva/tpa : NaN;
   $("tiles").innerHTML = [
-    ["Peças vendidas", num(tp), `média ${num(tp/nm)} por mês`],
-    ["Valor faturado", brl(tv), `média ${brl(tv/nm)} por mês`],
-    ["Valor médio por peça", tp ? (tv/tp).toLocaleString("pt-BR",{style:"currency",currency:"BRL"}) : "–", "valor ÷ peças"],
+    ["Peças vendidas", num(tp), cmp(tp,tpa,num)],
+    ["Valor faturado", brl(tv), cmp(tv,tva,brl)],
+    ["Valor médio por peça", brl2(pm), cmp(pm,pma,brl2)],
     ["Linhas vendidas", num(linhasVend), `${num(pecasDist.size)} peças diferentes`],
-    ["Período", cols.length ? `${mesLbl(cols[0][0])} a ${mesLbl(cols[cols.length-1][0])}` : "–", `${cols.length} meses`]
+    ["Período", cols.length ? `${mesLbl(cols[0][0])} a ${mesLbl(cols[cols.length-1][0])}` : "–",
+      `${cols.length} meses · comparado com ${cols.length ? mesLbl((+cols[0][0].slice(0,4)-1)+cols[0][0].slice(4))+" a "+mesLbl((+cols[n-1][0].slice(0,4)-1)+cols[n-1][0].slice(4)) : "–"}`]
   ].map(([k,v,s])=>`<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
-  $("sub1").textContent = "quantidade × engenharia, conjuntos abertos em peças";
-  $("sub2").textContent = st.modo==="rateio" ? "valor rateado entre as peças de cada item vendido" :
-    (A.F.q ? "filtro de peça não se aplica neste modo — limpe o campo Peça" : "valor na linha do item vendido (sem abertura por peça)");
-  tabela("t1", A.P, cols, v=>num(v), 1, A.P);
-  tabela("t2", A.V, cols, v=>num(v), 2, A.P, v=>brl(v));
+  const aviso = A.F.antFalta ? ` · ano anterior incompleto: ${A.F.antFalta} ${A.F.antFalta>1?"meses":"mês"} sem dados (a base começa em ${mesLbl(mesesOrd[0][0])})` : "";
+  $("sub1").textContent = "quantidade × engenharia, conjuntos abertos em peças" + aviso;
+  $("sub2").textContent = (st.modo==="rateio" ? "valor rateado entre as peças de cada item vendido" :
+    (A.F.q ? "filtro de peça não se aplica neste modo — limpe o campo Peça" : "valor na linha do item vendido (sem abertura por peça)")) + aviso;
+  $("sub3").textContent = "valor faturado ÷ quantidade de peças" + aviso;
+  $("resumoFiltro").textContent = resumoFiltro(cols);
+  tabela("t1", linhasDe(A.P), cols, {fmt:v=>num(v), fmtTot:v=>num(v), sel:"sel1"});
+  tabela("t2", linhasDe(A.V), cols, {fmt:v=>num(v), fmtTot:v=>brl(v), sel:"sel2"});
+  tabela("t3", precoMedio(A.P, A.V, cols.length), cols, {fmt:v=>num(v,2), fmtTot:v=>num(v,2), media:false, heat:false, totalRow:[pm,pma], cols3:true});
   grafico("ch1", A.P, cols, st.sel1, v=>num(v)+" peças", v=>num(v));
   grafico("ch2", A.V, cols, st.sel2, v=>brl(v), v=>num(v));
 }
 
-function tabela(id, M, cols, fmt, q, Pref, fmtTot){
-  fmtTot = fmtTot || fmt;
-  const n = cols.length;
-  const rows = [...M.entries()].map(([l,o])=>({l, o, t:o.v.reduce((a,b)=>a+b,0)})).filter(r=>r.t!==0).sort((a,b)=>b.t-a.t);
-  const total = new Float64Array(n); rows.forEach(r=>r.o.v.forEach((x,i)=>total[i]+=x));
-  const gt = total.reduce((a,b)=>a+b,0);
-  let max = 0; rows.forEach(r=>r.o.v.forEach(x=>{ if(x>max) max=x; }));
-  const heat = (x,mx) => x>0 && mx>0 ? `style="background:color-mix(in srgb, var(--heat) ${Math.round(6+44*x/mx)}%, transparent)"` : "";
-  const sel = q===1 ? st.sel1 : st.sel2;
-  let h = `<thead><tr><th>Linha / peça</th>${cols.map(([m])=>`<th>${mesLbl(m)}</th>`).join("")}<th class="tot">Total</th><th>% total</th><th>Média/mês</th></tr></thead><tbody>`;
+function resumoFiltro(cols){
+  const t = s => s.options[s.selectedIndex]?.text || "";
+  const p = [];
+  if(cols.length) p.push(`Período ${mesLbl(cols[0][0])} a ${mesLbl(cols[cols.length-1][0])}`);
+  p.push("Regional: " + t($("fReg")), "Representante: " + t($("fRep")), "Linha: " + t($("fLin")));
+  if($("fBusca").value.trim()) p.push("Peça: " + $("fBusca").value.trim());
+  p.push("Valor: " + (st.modo==="rateio" ? "rateado nas peças" : "linha do item vendido"));
+  return p.join(" · ");
+}
+
+function tabela(id, rows, cols, o){
+  const n = cols.length, fmt = o.fmt, fmtTot = o.fmtTot, media = o.media!==false, heatOn = o.heat!==false, ehPreco = !!o.cols3;
+  const total = new Float64Array(n); let totAnt = 0;
+  if(!ehPreco){ rows.forEach(r=>{ r.v.forEach((x,i)=>total[i]+=x); totAnt += r.ant; }); }
+  const gt = soma(total);
+  let max = 0; if(heatOn) rows.forEach(r=>r.v.forEach(x=>{ if(x>max) max=x; }));
+  const heat = (x,mx) => heatOn && x>0 && mx>0 ? `style="background:color-mix(in srgb, var(--heat) ${Math.round(6+44*x/mx)}%, transparent)"` : "";
+  const cel = (x,mx) => `<td ${heat(x,mx)}>${x && !isNaN(x) ? fmt(x) : "–"}</td>`;
+  const sel = o.sel ? st[o.sel] : undefined;
+  const fim = (t, ant) => `<td class="tot">${isNaN(t)?"–":fmtTot(t)}</td><td>${isNaN(ant)||!ant?"–":fmtTot(ant)}</td>${varCel(t,ant)}` +
+    (ehPreco ? "" : `<td>${num(gt? t/gt*100:0,1)}%</td>`) + (media ? `<td>${fmtTot(t/(n||1))}</td>` : "");
+  let h = `<thead><tr><th>Linha / peça</th>${cols.map(([m])=>`<th>${mesLbl(m)}</th>`).join("")}<th class="tot">${ehPreco?"Período":"Total"}</th><th>Ano anterior</th><th>Var.</th>${ehPreco?"":"<th>% total</th>"}${media?"<th>Média/mês</th>":""}</tr></thead><tbody>`;
   for(const r of rows){
-    const key = "L"+r.l, open = st.allOpen || st.open.has(key);
-    const temCmp = r.o.cmp.size>0;
+    const key = "L"+r.l, open = st.allOpen || st.open.has(key), temCmp = r.cmp.length>0;
     h += `<tr class="lin${sel===r.l?" sel":""}" data-l="${r.l}" data-k="${key}"><td><span class="caret">${temCmp?(open?"▾":"▸"):""}</span>${esc(nomeLinha(r.l))}<span class="cod">${esc(D.linhas[r.l])}</span></td>` +
-      [...r.o.v].map(x=>`<td ${heat(x,max)}>${x?fmt(x):"–"}</td>`).join("") +
-      `<td class="tot">${fmtTot(r.t)}</td><td>${num(gt? r.t/gt*100:0,1)}%</td><td>${fmtTot(r.t/(n||1))}</td></tr>`;
+      [...r.v].map(x=>cel(x,max)).join("") + fim(r.t, r.ant) + `</tr>`;
     if(open && temCmp){
-      const cs = [...r.o.cmp.entries()].map(([c,a])=>({c,a,t:a.reduce((x,y)=>x+y,0)})).filter(x=>x.t!==0).sort((a,b)=>b.t-a.t);
-      let cmax = 0; cs.forEach(x=>x.a.forEach(v=>{ if(v>cmax) cmax=v; }));
-      for(const x of cs){
+      let cmax = 0; if(heatOn) r.cmp.forEach(x=>x.v.forEach(v=>{ if(v>cmax) cmax=v; }));
+      for(const x of r.cmp){
         const c = D.comps[x.c];
         h += `<tr class="cmp"><td>${esc(c[3]||"Peça "+c[2])}<span class="cod">${esc(c[0])}</span>${c[4]?'<span class="flag">sem engenharia</span>':""}</td>` +
-          [...x.a].map(v=>`<td ${heat(v,cmax)}>${v?fmt(v):"–"}</td>`).join("") +
-          `<td class="tot">${fmtTot(x.t)}</td><td>${num(gt? x.t/gt*100:0,1)}%</td><td>${fmtTot(x.t/(n||1))}</td></tr>`;
+          [...x.v].map(v=>cel(v,cmax)).join("") + fim(x.t, x.ant) + `</tr>`;
       }
     }
   }
-  h += `<tr class="totr"><td>Total</td>${[...total].map(x=>`<td>${x?fmt(x):"–"}</td>`).join("")}<td class="tot">${fmtTot(gt)}</td><td>100%</td><td>${fmtTot(gt/(n||1))}</td></tr></tbody>`;
+  if(ehPreco){
+    const [pm,pma] = o.totalRow;
+    h += `<tr class="totr"><td>Média geral</td>${cols.map(()=>"<td></td>").join("")}<td class="tot">${isNaN(pm)?"–":fmtTot(pm)}</td><td>${isNaN(pma)?"–":fmtTot(pma)}</td>${varCel(pm,pma)}</tr></tbody>`;
+  } else {
+    h += `<tr class="totr"><td>Total</td>${[...total].map(x=>`<td>${x?fmt(x):"–"}</td>`).join("")}<td class="tot">${fmtTot(gt)}</td><td>${totAnt?fmtTot(totAnt):"–"}</td>${varCel(gt,totAnt)}<td>100%</td>${media?`<td>${fmtTot(gt/(n||1))}</td>`:""}</tr></tbody>`;
+  }
   if(!rows.length) h = `<tbody><tr><td class="muted">Sem vendas para os filtros escolhidos.</td></tr></tbody>`;
   const t = $(id); t.innerHTML = h;
   t.querySelectorAll("tr.lin").forEach(tr=>tr.addEventListener("click", ev=>{
     const l = +tr.dataset.l, k = tr.dataset.k;
-    if(ev.target.closest("td:first-child")){
+    if(ev.target.closest("td:first-child") || !o.sel){
       if(st.allOpen){ st.allOpen = false; D.linhas.forEach((_,i)=>st.open.add("L"+i)); $("btnExp").textContent = "Expandir peças"; }
       st.open.has(k) ? st.open.delete(k) : st.open.add(k);
-    } else if(q===1) st.sel1 = st.sel1===l ? null : l; else st.sel2 = st.sel2===l ? null : l;
+    } else st[o.sel] = st[o.sel]===l ? null : l;
     render();
   }));
 }
@@ -319,18 +410,25 @@ function renderSem(){
 function csv(){
   if(!D) return;
   const A = agregar(), cols = A.F.cols, out = [];
-  const head = ["Quadro","Linha","Nome da linha","Peça","Descrição",...cols.map(([m])=>m),"Total"];
-  out.push(head);
-  for(const [nome,M] of [["Peças",A.P],["Valor",A.V]]){
-    for(const [l,o] of M){
-      out.push([nome, D.linhas[l], nomeLinha(l), "", "", ...[...o.v].map(x=>x.toFixed(2).replace(".",",")), o.v.reduce((a,b)=>a+b,0).toFixed(2).replace(".",",")]);
-      for(const [c,a] of o.cmp){ const cc = D.comps[c];
-        out.push([nome, D.linhas[l], nomeLinha(l), cc[0], cc[3]||"", ...[...a].map(x=>x.toFixed(2).replace(".",",")), a.reduce((x,y)=>x+y,0).toFixed(2).replace(".",",")]); }
-    }
-  }
-  const txt = "﻿" + out.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\r\n");
+  const f = x => isNaN(x)||!isFinite(x) ? "" : x.toFixed(2).replace(".",",");
+  out.push(["Filtro: " + resumoFiltro(cols)]);
+  out.push(["Quadro","Linha","Nome da linha","Peça","Descrição",...cols.map(([m])=>m),"Total período","Ano anterior","Var. %"]);
+  const put = (nome, rows) => { for(const r of rows){
+    out.push([nome, D.linhas[r.l], nomeLinha(r.l), "", "", ...[...r.v].map(f), f(r.t), f(r.ant), f(varPct(r.t,r.ant))]);
+    for(const x of r.cmp){ const cc = D.comps[x.c];
+      out.push([nome, D.linhas[r.l], nomeLinha(r.l), cc[0], cc[3]||"", ...[...x.v].map(f), f(x.t), f(x.ant), f(varPct(x.t,x.ant))]); } } };
+  put("Peças", linhasDe(A.P)); put("Valor", linhasDe(A.V)); put("Valor médio por peça", precoMedio(A.P, A.V, cols.length));
+  const txt = "\ufeff" + out.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(";")).join("\r\n");
   const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([txt],{type:"text/csv"}));
   a.download = "venda_por_linha.csv"; a.click();
+}
+
+function pdf(){
+  if(!D) return;
+  $("dataImpressao").textContent = "Emitido em " + new Date().toLocaleString("pt-BR");
+  const box = $("boxSem"), aberto = box.open;
+  window.addEventListener("afterprint", ()=>{ box.open = aberto; }, {once:true});
+  window.print();
 }
 
 ["fDe","fAte","fRep","fLin"].forEach(i=>$(i).addEventListener("change", render));
@@ -340,6 +438,7 @@ $("segValor").addEventListener("click", ev=>{ const b = ev.target.closest("butto
   st.modo = b.dataset.v; $("segValor").querySelectorAll("button").forEach(x=>x.classList.toggle("on", x===b)); st.sel2 = null; render(); });
 $("btnExp").addEventListener("click", ()=>{ st.allOpen = !st.allOpen; if(!st.allOpen) st.open.clear(); $("btnExp").textContent = st.allOpen ? "Recolher peças" : "Expandir peças"; render(); });
 $("btnCsv").addEventListener("click", csv);
+$("btnPdf").addEventListener("click", pdf);
 $("btnReload").addEventListener("click", load);
 load();
 </script>

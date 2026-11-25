@@ -155,6 +155,7 @@ details.card summary{cursor:pointer;padding:12px 14px;font-weight:600}
 <div class="quebra"></div>
 <section class="card quadro pag">
   <div class="card-h"><h2>Quadro 3 · Valor médio da venda por peça (R$)</h2><span class="sub" id="sub3"></span><div class="pf"></div></div>
+  <div class="chart" id="ch3"></div>
   <div class="tablebox"><table id="t3"></table></div>
 </section>
 
@@ -186,7 +187,7 @@ const $ = id => document.getElementById(id);
 const nomeLinha = l => (D.linhasNome && D.linhasNome[l]) || ("Linha " + D.linhas[l]);
 
 let D = null, mesesOrd = [];
-const st = { regs:new Set(), modo:"rateio", open:new Set(), allOpen:false, sel1:null, sel2:null };
+const st = { regs:new Set(), modo:"rateio", open:new Set(), allOpen:false, sel1:null, sel2:null, sel3:null };
 
 async function load(){
   $("status").textContent = "Buscando dados no n8n… (a consulta pode levar alguns minutos)";
@@ -332,7 +333,15 @@ function render(){
   document.querySelectorAll(".pf").forEach(e=>e.textContent = $("resumoFiltro").textContent);
   tabela("t1", linhasDe(A.P), cols, {fmt:v=>num(v), fmtTot:v=>num(v), sel:"sel1"});
   tabela("t2", linhasDe(A.V), cols, {fmt:v=>num(v), fmtTot:v=>brl(v), sel:"sel2"});
-  tabela("t3", precoMedio(A.P, A.V, cols.length), cols, {fmt:v=>num(v,2), fmtTot:v=>num(v,2), media:false, heat:false, totalRow:[pm,pma], cols3:true});
+  const nn = cols.length, tpM = new Float64Array(nn), tvM = new Float64Array(nn);
+  for(const o of A.P.values()) o.v.forEach((x,i)=>tpM[i]+=x);
+  for(const o of A.V.values()) o.v.forEach((x,i)=>tvM[i]+=x);
+  const pmMes = Float64Array.from(tvM,(x,i)=>tpM[i] ? x/tpM[i] : NaN);
+  const rows3 = precoMedio(A.P, A.V, nn);
+  tabela("t3", rows3, cols, {fmt:v=>num(v,2), fmtTot:v=>num(v,2), media:false, heat:false, totalRow:[pm,pma,pmMes], cols3:true, sel:"sel3"});
+  const r3 = st.sel3!=null ? rows3.find(r=>r.l===st.sel3) : null;
+  grafico("ch3", null, cols, null, v=>isNaN(v)?"–":v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+" por peça", v=>num(v,2),
+    {vals: r3 ? r3.v : pmMes, titulo: r3 ? "Valor médio por peça · " + nomeLinha(r3.l) : "Valor médio por peça · média geral"});
   grafico("ch1", A.P, cols, st.sel1, v=>num(v)+" peças", v=>num(v));
   grafico("ch2", A.V, cols, st.sel2, v=>brl(v), v=>num(v));
 }
@@ -381,8 +390,8 @@ function tabela(id, rows, cols, o){
     }
   }
   if(ehPreco){
-    const [pm,pma] = o.totalRow;
-    h += `<tr class="totr"><td>Média geral</td>${cols.map(()=>"<td></td>").join("")}<td class="tot">${isNaN(pm)?"–":fmtTot(pm)}</td><td>${isNaN(pma)?"–":fmtTot(pma)}</td>${varCel(pm,pma)}</tr></tbody>`;
+    const [pm,pma,pmMes] = o.totalRow;
+    h += `<tr class="totr"><td>Média geral</td>${[...pmMes].map(x=>`<td>${isNaN(x)?"–":fmt(x)}</td>`).join("")}<td class="tot">${isNaN(pm)?"–":fmtTot(pm)}</td><td>${isNaN(pma)?"–":fmtTot(pma)}</td>${varCel(pm,pma)}</tr></tbody>`;
   } else {
     h += `<tr class="totr"><td>Total</td>${[...total].map(x=>`<td>${x?fmt(x):"–"}</td>`).join("")}<td class="tot">${fmtTot(gt)}</td><td>${totAnt?fmtTot(totAnt):"–"}</td>${varCel(gt,totAnt)}<td>100%</td>${media?`<td>${fmtTot(gt/(n||1))}</td>`:""}</tr></tbody>`;
   }
@@ -398,15 +407,16 @@ function tabela(id, rows, cols, o){
   }));
 }
 
-function grafico(id, M, cols, selL, fmtTip, fmtAx){
+function grafico(id, M, cols, selL, fmtTip, fmtAx, ov){
   const n = cols.length, vals = new Float64Array(n);
-  if(selL!=null && M.get(selL)) M.get(selL).v.forEach((x,i)=>vals[i]=x);
+  if(ov) ov.vals.forEach((x,i)=>vals[i]=x);
+  else if(selL!=null && M.get(selL)) M.get(selL).v.forEach((x,i)=>vals[i]=x);
   else if(selL==null) for(const o of M.values()) o.v.forEach((x,i)=>vals[i]+=x);
   const W = 1000, H = 170, L = 78, Rm = 8, Tp = 22, B = 22;
-  const mx = Math.max(...vals, 0) || 1;
+  const mx = Math.max(...[...vals].filter(x=>!isNaN(x)), 0) || 1;
   const nice = (() => { const p = 10**Math.floor(Math.log10(mx)); for(const k of [1,2,2.5,5,10]) if(k*p>=mx) return k*p; return 10*p; })();
   const y = v => Tp + (H-Tp-B) * (1 - v/nice), bw = (W-L-Rm)/Math.max(n,1), w = Math.max(2, Math.min(36, bw*0.62));
-  const titulo = selL==null ? "Total do filtro" : nomeLinha(selL);
+  const titulo = ov ? ov.titulo : selL==null ? "Total do filtro" : nomeLinha(selL);
   let s = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${titulo} por mês">`;
   s += `<text class="axis" x="${L}" y="12" style="font-size:11px;font-weight:600;fill:var(--ink2)">${esc(titulo)} por mês</text>`;
   for(let k=0;k<=2;k++){ const v = nice*k/2, yy = y(v); s += `<line class="grid" x1="${L}" x2="${W-Rm}" y1="${yy}" y2="${yy}"/><text class="axis" x="${L-6}" y="${yy+3}" text-anchor="end">${fmtAx(v)}</text>`; }

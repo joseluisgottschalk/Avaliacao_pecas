@@ -231,9 +231,9 @@ function render(){
   $("sub2").textContent = st.modo==="rateio" ? "valor rateado entre as peças de cada item vendido" :
     (A.F.q ? "filtro de peça não se aplica neste modo — limpe o campo Peça" : "valor na linha do item vendido (sem abertura por peça)");
   tabela("t1", A.P, cols, v=>num(v), 1, A.P);
-  tabela("t2", A.V, cols, v=>v ? compact(v) : "–", 2, A.P, v=>brl(v));
-  grafico("ch1", A.P, cols, st.sel1, v=>num(v)+" peças", compact);
-  grafico("ch2", A.V, cols, st.sel2, v=>brl(v), compact);
+  tabela("t2", A.V, cols, v=>num(v), 2, A.P, v=>brl(v));
+  grafico("ch1", A.P, cols, st.sel1, v=>num(v)+" peças", v=>num(v));
+  grafico("ch2", A.V, cols, st.sel2, v=>brl(v), v=>num(v));
 }
 
 function tabela(id, M, cols, fmt, q, Pref, fmtTot){
@@ -280,7 +280,7 @@ function grafico(id, M, cols, selL, fmtTip, fmtAx){
   const n = cols.length, vals = new Float64Array(n);
   if(selL!=null && M.get(selL)) M.get(selL).v.forEach((x,i)=>vals[i]=x);
   else if(selL==null) for(const o of M.values()) o.v.forEach((x,i)=>vals[i]+=x);
-  const W = 1000, H = 170, L = 52, Rm = 8, Tp = 22, B = 22;
+  const W = 1000, H = 170, L = 78, Rm = 8, Tp = 22, B = 22;
   const mx = Math.max(...vals, 0) || 1;
   const nice = (() => { const p = 10**Math.floor(Math.log10(mx)); for(const k of [1,2,2.5,5,10]) if(k*p>=mx) return k*p; return 10*p; })();
   const y = v => Tp + (H-Tp-B) * (1 - v/nice), bw = (W-L-Rm)/Math.max(n,1), w = Math.max(2, Math.min(36, bw*0.62));
